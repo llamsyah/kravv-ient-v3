@@ -1,0 +1,21 @@
+{
+  "checkedAt": "2026-09-12T16:38:11.518Z",
+  "passed": true,
+  "persistedCases": 7,
+  "sourceDownloads": 7,
+  "checks": [
+    "previous-run cases retained",
+    "previous browser case retained",
+    "source IDs resolve",
+    "analysis finding references intact",
+    "source downloads available",
+    "human reviews linked to their original runs",
+    "recommendation and final decisions distinct",
+    "portfolio and initial thesis retained",
+    "historical evidence snapshots unchanged",
+    "anonymous access rejected",
+    "Analyst cannot record decision",
+    "Partner and Admin pass role gate but require rationale",
+    "all existing case records unchanged by this validation"
+  ]
+}
