@@ -1,0 +1,26 @@
+import assert from 'node:assert/strict';
+const base='http://localhost:5173';
+const signin=await fetch(base+'/signin-with-chatgpt?return_to=%2F',{redirect:'manual'});
+const cookie=signin.headers.get('set-cookie').split(';')[0];
+let response=await fetch(base+'/api/workspace');assert.equal(response.status,401);
+response=await fetch(base+'/api/workspace',{headers:{cookie}});let loaded=await response.json();assert.equal(response.status,200,JSON.stringify(loaded));let state=loaded.state;
+async function action(action,payload,caseId){const r=await fetch(base+'/api/workspace',{method:'POST',headers:{cookie,'Content-Type':'application/json'},body:JSON.stringify({action,payload,caseId,revision:state.revision})});const d=await r.json();assert.equal(r.status,200,JSON.stringify(d));state=d.state;return d;}
+let d=await action('create',{companyName:'Workflow Test Company',website:'https://workflow-test.example',sector:'Test software',geography:'Singapore',investmentStage:'Seed',owner:'Test Analyst',thesis:'A fictional test thesis'});const id=d.createdId;
+const form=new FormData();form.set('file',new File(['Fictional test source: ARR USD 100,000.'], 'workflow-test.txt'));form.set('caseId',id);form.set('revision',String(state.revision));form.set('source','Local test fixture');form.set('type','Pitch Deck');
+response=await fetch(base+'/api/documents',{method:'POST',headers:{cookie},body:form});d=await response.json();assert.equal(response.status,200,JSON.stringify(d));state=d.state;let c=state.cases.find(c=>c.id===id);const doc=c.docs[0];
+response=await fetch(base+'/api/documents?id='+doc.id,{headers:{cookie}});assert.equal(await response.text(),'Fictional test source: ARR USD 100,000.');
+await action('evidence',{label:'ARR',value:'USD 100,000',kind:'Company claim',status:'Reported',documentId:doc.id,source:'',locator:'Line 1',excerpt:'ARR USD 100,000.'},id);
+await action('analysis',{name:'Initial Screening'},id);c=state.cases.find(c=>c.id===id);const runId=c.runs[0].id,evId=c.evidence[0].id;
+await action('resolveEvidence',{id:evId,status:'Supported',resolution:'Corroborated by fictional test ledger.'},id);c=state.cases.find(c=>c.id===id);assert.equal(c.runs[0].evidence[0].status,'Reported');
+await action('review',{runId,outcome:'Disagree',rationale:'Test analyst requests corroboration.'},id);
+await action('question',{text:'Can ARR be corroborated?',category:'Financials',priority:'High',owner:'Test Analyst',trigger:evId},id);c=state.cases.find(c=>c.id===id);await action('questionStatus',{id:c.questions[0].id,status:'Resolved',resolution:'Fictional ledger inspected.'},id);
+await action('recommendation',{outcome:'Request More Diligence',rationale:'Test independent analyst judgment.'},id);
+response=await fetch(base+'/api/workspace',{method:'POST',headers:{cookie,'Content-Type':'application/json'},body:JSON.stringify({action:'decision',revision:state.revision,caseId:id,payload:{outcome:'Invested',rationale:'Test',participants:'Test'}})});assert.equal(response.status,400);
+await action('role',{role:'Partner'});await action('decision',{outcome:'Invested',rationale:'Fictional partner decision.',participants:'Test Partner'},id);
+await action('portfolio',{date:'2026-09-12',ownership:'1% test',valuation:'USD 1m test'},id);
+await action('monitoring',{date:'2026-09-12',type:'Revenue Update',expected:'Test expectation',actual:'Test actual',note:'Manual test'},id);
+await action('stage',{stage:'Screening'},id);await action('decision',{outcome:'Pass',rationale:'Changed test judgment.',participants:'Test Partner'},id);
+const snapshot=await fetch(base+'/api/workspace',{headers:{cookie}}).then(r=>r.json());c=snapshot.state.cases.find(c=>c.id===id);assert.equal(c.decisions.length,2);assert.equal(c.decisions[1].outcome,'Invested');assert.equal(c.recommendations[0].outcome,'Request More Diligence');assert.equal(c.reviews[0].outcome,'Disagree');assert.equal(c.portfolio.updates.length,1);assert.equal(c.docs.length,1);assert.equal(c.questions[0].status,'Resolved');
+response=await fetch(base+'/api/workspace',{method:'POST',headers:{cookie,'Content-Type':'application/json'},body:JSON.stringify({action:'role',revision:0,payload:{role:'Admin'}})});assert.equal(response.status,409);
+await action('role',{role:'Analyst'});
+console.log(JSON.stringify({passed:true,checks:['sign-in','anonymous access rejection','case creation','private upload and byte read-back','evidence capture','analysis snapshot preservation','human disagreement','diligence resolution','recommendation','decision role restriction','portfolio transition','manual monitoring','reload persistence','reopened case retains decisions','optimistic conflict rejection'],caseId:id},null,2));
