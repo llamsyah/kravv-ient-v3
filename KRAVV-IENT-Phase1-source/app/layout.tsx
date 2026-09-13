@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./surface.css";
 
 export const metadata: Metadata = {
   title: "KRAVV-IENT | Investment Workspace",
