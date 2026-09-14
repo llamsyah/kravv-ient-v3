@@ -4,7 +4,9 @@ Desktop investment workspace built from the supplied implementation brief, produ
 
 ## Run and validate
 
-The dependency lockfile is preserved. On Windows, the installed npm command wrapper may resolve its scripts incorrectly; the direct commands below work with the existing installation.
+For this repository's local checkout, run `npm run setup` and `npm run dev` from the repository root (`C:\Users\PIXWAR\kravv-ient-v3`). Open `http://localhost:5173`, choose **Open my local workspace**, and enter your name and email. The local identity is self-declared and not a verified ChatGPT account. The same email opens the same local workspace after a restart.
+
+The dependency lockfile is preserved. The commands below also work when run directly from this application subfolder.
 
 - Development: `node scripts/run-framework.mjs dev` (localhost:5173)
 - Type check: `node node_modules/typescript/bin/tsc --noEmit`
@@ -12,11 +14,11 @@ The dependency lockfile is preserved. On Windows, the installed npm command wrap
 - Local end-to-end test: `node tests/workflow.mjs` (requires the development server; creates fictional test records)
 - Generate schema migrations: `node node_modules/drizzle-kit/bin.cjs generate`
 
-The existing local database is already initialized. Do not replay its migration. For a new local checkout, build first, then apply `drizzle/0000_steady_callisto.sql` once using the documented Wrangler local D1 migration flow. Hosted migrations are applied by Sites.
+For local sign-ins, the D1 workspace table is initialized automatically on first access. Local cases and uploaded documents persist under `.wrangler/state`; the local identity signing key is under `.sites-runtime`. These folders are ignored by Git and do not sync with hosted Sites data. Hosted migrations are applied by Sites.
 
 ## Functional boundaries
 
-Authentication uses Sites/ChatGPT identity, with a local-only mock sign-in supplied by the development tooling. D1 persists a versioned workspace aggregate keyed by authenticated owner. R2 stores uploaded document bytes. Every API checks identity. Writes use optimistic revision checks to prevent silent overwrites.
+Hosted authentication uses Sites/ChatGPT identity. The development server offers a separate loopback-only local sign-in with a self-declared name/email and signed cookie; it does not authenticate a real ChatGPT account. D1 persists a versioned workspace aggregate keyed by identity. R2 stores uploaded document bytes. Every API checks identity. Writes use optimistic revision checks to prevent silent overwrites.
 
 Investment Cases link to Companies. Cases preserve documents, evidence, analysis input snapshots, findings, diligence questions, human reviews, recommendations, decisions, activity, and optional portfolio records. Historical judgments are appended, never replaced. Portfolio entry retains the original case and thesis. A reopened case retains its decisions.
 

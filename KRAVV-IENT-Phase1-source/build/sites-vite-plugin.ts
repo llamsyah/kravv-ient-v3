@@ -1,6 +1,8 @@
 // Vendored from @openai/sites-vite-plugin 0.2.0 (openai/sites#9).
 // See sites-vite-plugin.LICENSE for the upstream MIT license.
 import { access, cp, mkdir, rm } from "node:fs/promises";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { resolve } from "node:path";
 import type { Plugin } from "vite";
@@ -9,12 +11,15 @@ const localUserId = "local_seedy";
 const localEmail = "seedy@sites.test";
 const localFullName = "Seedy";
 const localCookieName = "__sites_local_auth";
+const personalCookieName = "__kravv_local_identity";
 const localHosts = new Set(["localhost", "127.0.0.1", "::1"]);
 const localAddresses = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 const authPaths = new Set([
   "/signin-with-chatgpt",
   "/signout-with-chatgpt",
   "/callback",
+  "/local-login",
+  "/local-logout",
 ]);
 
 async function exists(path: string): Promise<boolean> {
@@ -42,6 +47,7 @@ export function sites({ mockAuth = true } = {}): Plugin {
     configureServer(server) {
       if (!mockAuth) return;
       const secure = Boolean(server.config.server.https);
+      const localSecret = readLocalSecret(resolve(root, ".sites-runtime", "local-auth-key"));
 
       server.config.logger.info(`Sites local sign-in: ${localEmail}`);
       server.middlewares.use((request, response, next) => {
@@ -80,6 +86,55 @@ export function sites({ mockAuth = true } = {}): Plugin {
           return;
         }
 
+        if (url.pathname === "/local-login" || url.pathname === "/local-logout") {
+          if ((request.headers.origin && request.headers.origin !== url.origin) ||
+              request.headers["sec-fetch-site"] === "cross-site") {
+            respond(response, 403);
+            return;
+          }
+          if (url.pathname === "/local-logout") {
+            response.statusCode = 303;
+            response.setHeader("Location", "/");
+            response.setHeader("Cache-Control", "private, no-store");
+            response.setHeader("Set-Cookie", [personalCookie(personalCookieName, "", secure, true), personalCookie(localCookieName, "", secure, true)]);
+            response.end();
+            return;
+          }
+          if (request.method === "GET") {
+            response.statusCode = 200;
+            response.setHeader("Content-Type", "text/html; charset=utf-8");
+            response.setHeader("Cache-Control", "private, no-store");
+            response.end(localSignInPage());
+            return;
+          }
+          if (request.method !== "POST" || !String(request.headers["content-type"] ?? "").startsWith("application/x-www-form-urlencoded")) {
+            respond(response, 405);
+            return;
+          }
+          void readForm(request).then(form => {
+            const fullName = (form.get("fullName") ?? "").trim();
+            const email = (form.get("email") ?? "").trim().toLowerCase();
+            if (fullName.length < 2 || fullName.length > 80 || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+              response.statusCode = 400;
+              response.setHeader("Content-Type", "text/html; charset=utf-8");
+              response.setHeader("Cache-Control", "private, no-store");
+              response.end(localSignInPage("Enter a name and a valid email address."));
+              return;
+            }
+            const userId = `local_${createHash("sha256").update(email).digest("hex").slice(0, 32)}`;
+            const payload = Buffer.from(JSON.stringify({userId, email, fullName})).toString("base64url");
+            const signature = createHmac("sha256", localSecret).update(payload).digest("base64url");
+            response.statusCode = 303;
+            response.setHeader("Cache-Control", "private, no-store");
+            response.setHeader("Location", "/");
+            response.setHeader("Set-Cookie", [personalCookie(personalCookieName, `${payload}.${signature}`, secure),personalCookie(localCookieName, "", secure, true)]);
+            response.end();
+          }).catch(() => respond(response, 400));
+          return;
+        }
+
+        setHeader(request, "x-kravv-local-mode", "1");
+
         const cookies = (request.headers.cookie ?? "")
           .split(";")
           .map((cookie) => cookie.trim())
@@ -87,8 +142,9 @@ export function sites({ mockAuth = true } = {}): Plugin {
         const signInCookies = cookies
           .filter((cookie) => cookie.startsWith(`${localCookieName}=`))
           .map((cookie) => cookie.slice(localCookieName.length + 1));
+        const personalCookies = cookies.filter(cookie => cookie.startsWith(`${personalCookieName}=`));
         const applicationCookies = cookies.filter(
-          (cookie) => !cookie.startsWith(`${localCookieName}=`),
+          (cookie) => !cookie.startsWith(`${localCookieName}=`) && !cookie.startsWith(`${personalCookieName}=`),
         );
         if (applicationCookies.length !== cookies.length) {
           removeHeader(request, "cookie");
@@ -105,7 +161,13 @@ export function sites({ mockAuth = true } = {}): Plugin {
         const signIn = url.pathname === "/signin-with-chatgpt";
         const signOut = url.pathname === "/signout-with-chatgpt";
         if (!signIn && !signOut) {
-          if (signInCookies.length === 1 && signInCookies[0] === "1") {
+          const localIdentity = personalCookies.length === 1 ? verifyLocalIdentity(personalCookies[0].slice(personalCookieName.length + 1), localSecret) : null;
+          if (localIdentity) {
+            setHeader(request, "oai-authenticated-user-id", localIdentity.userId);
+            setHeader(request, "oai-authenticated-user-email", localIdentity.email);
+            setHeader(request, "oai-authenticated-user-full-name", encodeURIComponent(localIdentity.fullName));
+            setHeader(request, "oai-authenticated-user-full-name-encoding", "percent-encoded-utf-8");
+          } else if (signInCookies.length === 1 && signInCookies[0] === "1") {
             setHeader(request, "oai-authenticated-user-id", localUserId);
             setHeader(request, "oai-authenticated-user-email", localEmail);
             setHeader(
@@ -227,4 +289,50 @@ function safeReturn(value: string | null): string {
   } catch {
     return "/";
   }
+}
+
+function readLocalSecret(path: string): Buffer {
+  mkdirSync(resolve(path, ".."), {recursive: true});
+  try { return readFileSync(path); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    try { writeFileSync(path, randomBytes(32), {flag: "wx", mode: 0o600}); }
+    catch (writeError) { if ((writeError as NodeJS.ErrnoException).code !== "EEXIST") throw writeError; }
+    return readFileSync(path);
+  }
+}
+
+function personalCookie(name: string, value: string, secure: boolean, clear = false) {
+  return `${name}=${value}; Path=/; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}${clear ? "; Max-Age=0" : ""}`;
+}
+
+function verifyLocalIdentity(token: string, secret: Buffer): {userId:string;email:string;fullName:string}|null {
+  const [payload, signature, extra] = token.split(".");
+  if (!payload || !signature || extra || payload.length > 1024) return null;
+  const expected = createHmac("sha256", secret).update(payload).digest();
+  let supplied: Buffer;
+  try { supplied = Buffer.from(signature, "base64url"); }
+  catch { return null; }
+  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) return null;
+  try {
+    const value = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    if (typeof value.email !== "string" || typeof value.fullName !== "string" || typeof value.userId !== "string") return null;
+    const expectedId = `local_${createHash("sha256").update(value.email).digest("hex").slice(0, 32)}`;
+    return value.userId === expectedId ? value : null;
+  } catch { return null; }
+}
+
+async function readForm(request: IncomingMessage): Promise<URLSearchParams> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of request) {
+    size += chunk.length;
+    if (size > 4096) throw new Error("Local sign-in form is too large");
+    chunks.push(chunk);
+  }
+  return new URLSearchParams(Buffer.concat(chunks).toString("utf8"));
+}
+
+function localSignInPage(error = "") {
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>KRAVV-IENT local sign-in</title><style>body{font:16px system-ui,sans-serif;background:#11171f;color:#ebf2fa;min-height:100vh;display:grid;place-items:center;margin:0}main{width:min(390px,calc(100vw - 40px));background:#1c2532;padding:36px;border-top:2px solid #7198d3}h1{font-size:27px;font-weight:500;margin:12px 0 20px}p,small{color:#b6c5d8;line-height:1.6}label{display:block;margin:18px 0 6px}input{box-sizing:border-box;width:100%;padding:12px;color:white;background:#131b26;border:1px solid #4c5b70;border-radius:4px;font:inherit}button{margin-top:24px;background:#3568aa;border:0;border-radius:4px;padding:12px 18px;color:white;font:inherit;cursor:pointer}strong{color:#efb2ad}</style><main><small>KRAVV-IENT · LOCAL WORKSPACE</small><h1>Sign in locally</h1><p>Use your name and email to open your own workspace on this computer. This local identity does not verify your email or sign in to ChatGPT.</p>${error ? `<strong>${error}</strong>` : ""}<form method="post" action="/local-login"><label for="fullName">Your name</label><input id="fullName" name="fullName" autocomplete="name" maxlength="80" required><label for="email">Your email</label><input id="email" name="email" type="email" autocomplete="email" maxlength="254" required><button type="submit">Open my workspace</button></form><p><small>Data is stored in this project's local D1 database and document bucket.</small></p></main></html>`;
 }

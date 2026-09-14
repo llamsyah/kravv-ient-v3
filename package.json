@@ -1,0 +1,10 @@
+{
+  "name": "kravv-ient-v3-local",
+  "private": true,
+  "scripts": {
+    "setup": "npm --prefix KRAVV-IENT-Phase1-source ci",
+    "dev": "npm --prefix KRAVV-IENT-Phase1-source run dev",
+    "typecheck": "node KRAVV-IENT-Phase1-source/node_modules/typescript/bin/tsc --noEmit --project KRAVV-IENT-Phase1-source/tsconfig.json",
+    "build": "npm --prefix KRAVV-IENT-Phase1-source run build"
+  }
+}
