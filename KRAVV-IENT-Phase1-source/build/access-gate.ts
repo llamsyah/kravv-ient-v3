@@ -27,7 +27,10 @@ function render(response: ServerResponse, view: string, options: Record<string, 
   response.setHeader('Content-Type', 'text/html; charset=utf-8');
   response.setHeader('Cache-Control', 'private, no-store');
   response.setHeader('Pragma', 'no-cache');
-  response.setHeader('Referrer-Policy', 'no-referrer');
+  // Native same-origin POST forms need their Origin preserved. no-referrer
+  // makes browsers send Origin: null, correctly rejected by both origin guards.
+  // Still omit referrers for cross-origin navigation; never allow null origins.
+  response.setHeader('Referrer-Policy', 'same-origin');
   response.setHeader('X-Frame-Options', 'DENY');
   response.setHeader('X-Content-Type-Options', 'nosniff');
   response.setHeader('Content-Security-Policy', `default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'`);

@@ -22,6 +22,27 @@ if(process.argv.includes('--verify-restart')) {
 }
 
 const anonymous=new AccessClient(base);
+// Native browser form regression: no-referrer used to turn even local POST
+// navigations into Origin: null. Fix the served policy, not the origin guard.
+const navigationHeaders={'Sec-Fetch-Site':'same-origin','Sec-Fetch-Mode':'navigate','Sec-Fetch-Dest':'document','Sec-Fetch-User':'?1'};
+for(const page of ['/access','/access/initialize','/access/login','/access/recover','/access/signout','/access/legacy']) {
+  const rendered=await anonymous.request(page);
+  assert.equal(rendered.status,200);
+  assert.equal(rendered.headers.get('referrer-policy'),'same-origin',page+' must preserve the origin of native local form submissions');
+}
+for(const origin of ['null','http://example.invalid','http://localhost:5999','http://127.0.0.1:5999']) {
+  const rejected=await anonymous.post('/access/initialize',{operator:'Rejected browser QA',phrase:'Fictional browser phrase',confirmation:'Fictional browser phrase'},{...navigationHeaders,Origin:origin});
+  assert.equal(rejected.status,403,'Untrusted origin must remain rejected: '+origin);
+  assert.equal(rejected.headers.getSetCookie().length,0);
+}
+const nativeForm=new AccessClient(base);
+const nativePhrase='Fictional native form '+Date.now();
+const nativeResponse=await nativeForm.post('/access/initialize',{operator:'Native form QA',phrase:nativePhrase,confirmation:nativePhrase},{...navigationHeaders,Referer:base+'/access/initialize'});
+assert.equal(nativeResponse.status,201,'Same-origin native initialization must reach the recovery-key page');
+assert.equal(nativeResponse.headers.get('referrer-policy'),'same-origin');
+assert.match(await nativeResponse.text(),/Keep your Recovery Key/);
+assert.equal((await nativeForm.post('/access/continue',{saved:'yes'},{...navigationHeaders,Referer:base+'/access/initialize'})).status,303);
+assert.equal((await nativeForm.post('/access/signout',{},navigationHeaders)).status,303);
 assert.equal((await anonymous.request('/access/login',{method:'POST',headers:{Origin:base,'Content-Type':'application/json'},body:'{}'})).status,400);
 for(const path of ['/api/workspace','/api/documents?id=missing'])assert.equal((await anonymous.request(path)).status,401);
 let response=await anonymous.request('/');assert.ok([303,307].includes(response.status));assert.equal(response.headers.get('location'),'/access');

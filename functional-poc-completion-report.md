@@ -65,3 +65,15 @@ No real AI, RAG, extraction, external research, assistant/chatbot, collaborative
 The remaining milestone item is authenticated browser UX acceptance. The available browser tool produced no input value changes with its documented fill, keyboard, set-value or paste operations. This establishes a validation limitation; it does not prove an application input defect. Manual typing confirmation was requested without requesting credentials. Complete that browser audit before marking the entire milestone accepted.
 
 The implementation, tests and documentation are intended for the existing `main` commit/push workflow. Runtime credentials, databases, files and test reports remain ignored. The unrelated pre-existing untracked `npx`, `drizzle.config.ts` and `wrangler.jsonc` are preserved and excluded. Refer to Git history for the resulting commit; pushing this source does not publish a hosted site.
+
+## Local browser form regression follow-up
+
+Manual acceptance found initialization returning plain `Forbidden`. The server recorded `/access/initialize` being rejected by Vinext's development origin guard with `Origin: null`. The gate's `Referrer-Policy: no-referrer` caused native browser POST navigation to suppress its origin, even on localhost. The earlier protocol tests supplied an explicit trusted Origin and missed this browser behavior.
+
+The narrow fix changes only the Access Gate response policy to `same-origin`. Host/loopback checks, exact-origin comparison, cross-site rejection and the framework guard are unchanged. Opaque `null` origins remain rejected; no allowlist or proxy-header trust was added. Cross-origin navigation still receives no referrer.
+
+The same defect was reproduced with the native sign-out form in the actual in-app browser on this machine. After reloading the form with the corrected policy, its POST completed and the browser visibly returned to `/access`. Temporary metadata-only diagnostics measured `Host: localhost:5173`, `Origin: http://localhost:5173`, `Sec-Fetch-Site: same-origin`, remote address `::1`, and status 303. Diagnostics were removed before commit; no request bodies or credentials were logged.
+
+The new regression failed against the original response policy and passes with the fix. It checks every gate page's policy, initialization with native navigation headers through the real local server (201 and the Recovery Key page), continuation/sign-out, and rejection of `Origin: null`, an external origin and different localhost ports. Existing host/cross-site/authentication regressions remain in place. Authentication, workflow, analysis workflow, analysis presentation, typecheck and production build all pass. This bounded fix does not claim completion of the separate full authenticated browser milestone audit.
+
+Reload an already-open initialization page before retrying: a document loaded before the fix retains its old referrer policy until refreshed.
