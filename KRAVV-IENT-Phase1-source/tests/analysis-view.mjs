@@ -1,0 +1,16 @@
+import {readFileSync} from 'node:fs';
+import {createRequire} from 'node:module';
+import assert from 'node:assert/strict';
+const require=createRequire(import.meta.url),ts=require('typescript');
+const source=readFileSync(new URL('../lib/analysis-view.ts',import.meta.url),'utf8');
+const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
+const module={exports:{}};new Function('exports','module',compiled)(module.exports,module);
+const {evidenceChanges,analysisView,suggestedQuestionContext}=module.exports;
+const evidence=['Supported','Verified','Conflicting','Unknown','Reported'].map((status,i)=>({id:String(i),status,label:'Claim '+i,value:'Test',documentId:i<3?'doc-1':'',source:'Source',locator:'Line 1',excerpt:'Test'}));
+const run={id:'historical-run',name:'Due Diligence',evidence:structuredClone(evidence)};
+const view=analysisView(run);assert.equal(view.supported.length,2);assert.equal(view.documentCount,1);assert.equal(view.suggestions.length,3);
+const changed=structuredClone(evidence);changed[4].status='Supported';changed.push({...evidence[0],id:'new'});changed.splice(1,1);
+assert.deepEqual(evidenceChanges(changed,run.evidence),{added:1,changed:1,removed:1});assert.equal(run.evidence[4].status,'Reported');
+const question=suggestedQuestionContext({evidence:changed},run,evidence[1],'Check this?');assert.equal(question.trigger,'');assert.match(question.text,/historical-run/);
+assert.deepEqual(evidenceChanges(evidence,run.evidence),{added:0,changed:0,removed:0});
+console.log('Passed: status derivation, truthful evidence deltas, snapshot isolation and historical diligence attribution.');

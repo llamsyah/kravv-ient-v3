@@ -50,3 +50,19 @@ Not implemented: live AI, automated extraction or contradiction discovery, exter
 ## Resume validation
 
 The previous run completed the product implementation, a production build, type checking, end-to-end workflow testing and initial browser checks. The resumed run preserved it, checked the earlier saved records, source byte downloads, historical judgment/source references, permissions, all global and case navigation, and reload recovery. It repaired only in-case shortcut URL synchronization and safe decoding of malformed case links. No new business rules or visual concepts were introduced.
+
+## Core Analysis Workflow PoC
+
+The V3 bottom navigation and case tabs now connect lightweight creation, living context, source material, manually structured evidence, analysis readiness, a short simulated processing sequence, and a saved result. Results include expandable findings, snapshot source inspection, recorded conflicts/unknowns, editable diligence suggestions and a separate human-review handoff to recommendation/decision.
+
+Readiness uses real record counts. Results use the unchanged saved `rules-v1` assessment and findings; presentation groups evidence by its recorded status. Current-versus-snapshot evidence differences are counted by stable evidence IDs and stored fields. Historical document additions are not inferred: the result reports only distinct document references in its evidence snapshot.
+
+Processing lasts about three seconds and illustrates the PoC sequence; it is not server telemetry or a durable background job. The existing save starts immediately, and completion is shown only after that save succeeds. A reload can recover an already saved run. No AI API, chatbot, extraction, verification or external research was added.
+
+Suggested diligence remains a suggestion until the user opens the existing form and saves it. The model has no question-to-run field, so the editable question includes the originating run ID, context and evidence snapshot text; its existing evidence trigger points to the current evidence entry. This is a presentation convention, not an immutable provenance relationship. No schema migration or new decision rules were introduced.
+
+- Presentation derivation checks: `node tests/analysis-view.mjs`
+- Local workflow acceptance: `node tests/analysis-workflow.mjs` (creates one clearly fictional case and verifies existing cases/companies are unchanged). Set `TEST_BASE_URL` to the intended localhost port when multiple checkouts are running.
+- New implementation: `app/analysis-workspace.tsx`, `app/analysis.css`, `lib/analysis-view.ts`.
+
+The existing fictional Aster and other sample cases remain intact. Validation uses an additional clearly fictional case instead of replacing saved sample data. Formal diligence priority, materiality, analysis taxonomy and immutable question-to-run relationships remain product decisions.
