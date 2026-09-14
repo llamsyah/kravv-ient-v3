@@ -7,9 +7,6 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { resolve } from "node:path";
 import type { Plugin } from "vite";
 
-const localUserId = "local_seedy";
-const localEmail = "seedy@sites.test";
-const localFullName = "Seedy";
 const localCookieName = "__sites_local_auth";
 const personalCookieName = "__kravv_local_identity";
 const localHosts = new Set(["localhost", "127.0.0.1", "::1"]);
@@ -49,7 +46,7 @@ export function sites({ mockAuth = true } = {}): Plugin {
       const secure = Boolean(server.config.server.https);
       const localSecret = readLocalSecret(resolve(root, ".sites-runtime", "local-auth-key"));
 
-      server.config.logger.info(`Sites local sign-in: ${localEmail}`);
+      server.config.logger.info("KRAVV-IENT local sign-in: /local-login");
       server.middlewares.use((request, response, next) => {
         for (const name of Object.keys(request.headers)) {
           if (name.startsWith("oai-authenticated-user-")) {
@@ -139,9 +136,6 @@ export function sites({ mockAuth = true } = {}): Plugin {
           .split(";")
           .map((cookie) => cookie.trim())
           .filter(Boolean);
-        const signInCookies = cookies
-          .filter((cookie) => cookie.startsWith(`${localCookieName}=`))
-          .map((cookie) => cookie.slice(localCookieName.length + 1));
         const personalCookies = cookies.filter(cookie => cookie.startsWith(`${personalCookieName}=`));
         const applicationCookies = cookies.filter(
           (cookie) => !cookie.startsWith(`${localCookieName}=`) && !cookie.startsWith(`${personalCookieName}=`),
@@ -167,19 +161,6 @@ export function sites({ mockAuth = true } = {}): Plugin {
             setHeader(request, "oai-authenticated-user-email", localIdentity.email);
             setHeader(request, "oai-authenticated-user-full-name", encodeURIComponent(localIdentity.fullName));
             setHeader(request, "oai-authenticated-user-full-name-encoding", "percent-encoded-utf-8");
-          } else if (signInCookies.length === 1 && signInCookies[0] === "1") {
-            setHeader(request, "oai-authenticated-user-id", localUserId);
-            setHeader(request, "oai-authenticated-user-email", localEmail);
-            setHeader(
-              request,
-              "oai-authenticated-user-full-name",
-              localFullName,
-            );
-            setHeader(
-              request,
-              "oai-authenticated-user-full-name-encoding",
-              "percent-encoded-utf-8",
-            );
           }
           next();
           return;
@@ -217,6 +198,14 @@ export function sites({ mockAuth = true } = {}): Plugin {
           return;
         }
 
+        if (signIn) {
+          response.statusCode = 302;
+          response.setHeader("Cache-Control", "private, no-store");
+          response.setHeader("Location", "/local-login");
+          response.end();
+          return;
+        }
+
         response.statusCode = request.method === "POST" ? 303 : 302;
         response.setHeader("Cache-Control", "private, no-store");
         response.setHeader(
@@ -225,9 +214,7 @@ export function sites({ mockAuth = true } = {}): Plugin {
         );
         response.setHeader(
           "Set-Cookie",
-          `${localCookieName}=${signIn ? "1" : ""}; Path=/; ${
-            signOut ? "Max-Age=0; " : ""
-          }HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`,
+          [personalCookie(personalCookieName, "", secure, true), personalCookie(localCookieName, "", secure, true)],
         );
         response.end();
       });

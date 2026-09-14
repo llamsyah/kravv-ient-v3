@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 const base='http://localhost:5173';
-const signin=await fetch(base+'/signin-with-chatgpt?return_to=%2F',{redirect:'manual'});
-const cookie=signin.headers.get('set-cookie').split(';')[0];
+const signin=await fetch(base+'/local-login',{method:'POST',redirect:'manual',headers:{'Content-Type':'application/x-www-form-urlencoded',Origin:base},body:new URLSearchParams({fullName:'Workflow Test',email:'workflow-test@example.invalid'})});
+assert.equal(signin.status,303);
+const cookie=signin.headers.getSetCookie().find(value=>value.startsWith('__kravv_local_identity=')).split(';')[0];
 let response=await fetch(base+'/api/workspace');assert.equal(response.status,401);
 response=await fetch(base+'/api/workspace',{headers:{cookie}});let loaded=await response.json();assert.equal(response.status,200,JSON.stringify(loaded));let state=loaded.state;
 async function action(action,payload,caseId){const r=await fetch(base+'/api/workspace',{method:'POST',headers:{cookie,'Content-Type':'application/json'},body:JSON.stringify({action,payload,caseId,revision:state.revision})});const d=await r.json();assert.equal(r.status,200,JSON.stringify(d));state=d.state;return d;}
