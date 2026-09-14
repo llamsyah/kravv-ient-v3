@@ -1,11 +1,11 @@
+import {initialize} from './access-client.mjs';
 // Local-only acceptance test. Creates one explicitly fictional case; existing cases are not edited.
 import assert from 'node:assert/strict';
 import {mkdir,writeFile} from 'node:fs/promises';
 const base=process.env.TEST_BASE_URL||'http://localhost:5173';
 assert.ok(['localhost','127.0.0.1'].includes(new URL(base).hostname),'This fixture-writing test requires a local server.');
-const login=await fetch(base+'/local-login',{method:'POST',redirect:'manual',headers:{'Content-Type':'application/x-www-form-urlencoded',Origin:base},body:new URLSearchParams({fullName:'Analysis Workflow Test',email:'analysis-workflow-test@example.invalid'})});
-assert.equal(login.status,303);
-const cookie=login.headers.getSetCookie().find(value=>value.startsWith('__kravv_local_identity=')).split(';')[0];
+const {client}=await initialize(base,'Functional workflow QA');
+const cookie=client.cookie;
 const headers={cookie,'Content-Type':'application/json'};
 const get=()=>fetch(base+'/api/workspace',{headers:{cookie}}).then(r=>r.json());
 let state=(await get()).state;

@@ -1,8 +1,8 @@
+import {initialize} from './access-client.mjs';
 import assert from 'node:assert/strict';
-const base='http://localhost:5173';
-const signin=await fetch(base+'/local-login',{method:'POST',redirect:'manual',headers:{'Content-Type':'application/x-www-form-urlencoded',Origin:base},body:new URLSearchParams({fullName:'Workflow Test',email:'workflow-test@example.invalid'})});
-assert.equal(signin.status,303);
-const cookie=signin.headers.getSetCookie().find(value=>value.startsWith('__kravv_local_identity=')).split(';')[0];
+const base=process.env.TEST_BASE_URL||'http://localhost:5173';
+const {client}=await initialize(base,'Functional workflow QA');
+const cookie=client.cookie;
 let response=await fetch(base+'/api/workspace');assert.equal(response.status,401);
 response=await fetch(base+'/api/workspace',{headers:{cookie}});let loaded=await response.json();assert.equal(response.status,200,JSON.stringify(loaded));let state=loaded.state;
 async function action(action,payload,caseId){const r=await fetch(base+'/api/workspace',{method:'POST',headers:{cookie,'Content-Type':'application/json'},body:JSON.stringify({action,payload,caseId,revision:state.revision})});const d=await r.json();assert.equal(r.status,200,JSON.stringify(d));state=d.state;return d;}
@@ -23,5 +23,11 @@ await action('monitoring',{date:'2026-09-12',type:'Revenue Update',expected:'Tes
 await action('stage',{stage:'Screening'},id);await action('decision',{outcome:'Pass',rationale:'Changed test judgment.',participants:'Test Partner'},id);
 const snapshot=await fetch(base+'/api/workspace',{headers:{cookie}}).then(r=>r.json());c=snapshot.state.cases.find(c=>c.id===id);assert.equal(c.decisions.length,2);assert.equal(c.decisions[1].outcome,'Invested');assert.equal(c.recommendations[0].outcome,'Request More Diligence');assert.equal(c.reviews[0].outcome,'Disagree');assert.equal(c.portfolio.updates.length,1);assert.equal(c.docs.length,1);assert.equal(c.questions[0].status,'Resolved');
 response=await fetch(base+'/api/workspace',{method:'POST',headers:{cookie,'Content-Type':'application/json'},body:JSON.stringify({action:'role',revision:0,payload:{role:'Admin'}})});assert.equal(response.status,409);
+await action('role',{role:'Analyst'});
+response=await fetch(base+'/api/workspace',{method:'POST',headers:{cookie,'Content-Type':'application/json'},body:JSON.stringify({action:'portfolio',revision:state.revision,caseId:id,payload:{date:'2026-09-12',ownership:'1%',valuation:'Test'}})});assert.equal(response.status,400);
+await action('role',{role:'Admin'});await action('decision',{outcome:'Invested',rationale:'Fictional admin permission check.',participants:'Test Admin'},id);
+c=state.cases.find(c=>c.id===id);assert.equal(c.decisions.length,3);assert.equal(c.decisions[2].outcome,'Invested');assert.equal(c.portfolio.updates.length,1);
+const isolated=await initialize(base,'Isolated document QA');
+assert.equal((await isolated.client.request('/api/documents?id='+doc.id)).status,404);
 await action('role',{role:'Analyst'});
 console.log(JSON.stringify({passed:true,checks:['sign-in','anonymous access rejection','case creation','private upload and byte read-back','evidence capture','analysis snapshot preservation','human disagreement','diligence resolution','recommendation','decision role restriction','portfolio transition','manual monitoring','reload persistence','reopened case retains decisions','optimistic conflict rejection'],caseId:id},null,2));

@@ -6,6 +6,8 @@ export type ChatGPTUser = {
   displayName: string;
   email: string;
   fullName: string | null;
+  workspaceId?: string;
+  localAccess?: 'gate' | 'legacy';
 };
 
 const USER_ID_HEADER = "oai-authenticated-user-id";
@@ -20,6 +22,17 @@ const CALLBACK_PATH = "/callback";
 
 export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
   const requestHeaders = await headers();
+  // The dev middleware strips client hints and injects only verified local identities.
+  // Compiled production builds never accept these local headers.
+  if (process.env.NODE_ENV === 'development' && requestHeaders.get('x-kravv-local-mode') === '1') {
+    const userId = requestHeaders.get('x-kravv-operator-id');
+    const fullName = safeDecodeURIComponent(requestHeaders.get('x-kravv-operator-name') ?? '');
+    const mode = requestHeaders.get('x-kravv-access-mode');
+    if (!userId || !fullName || !['gate','legacy'].includes(mode ?? '')) return null;
+    const workspaceId = requestHeaders.get('x-kravv-workspace-id') ?? undefined;
+    if (mode === 'gate' && (!workspaceId || userId !== `local_workspace_${workspaceId}`)) return null;
+    return {userId, displayName: fullName, fullName, email: mode === 'legacy' ? requestHeaders.get('x-kravv-legacy-email') ?? '' : '', workspaceId, localAccess: mode as 'gate' | 'legacy'};
+  }
   const userId = requestHeaders.get(USER_ID_HEADER);
   const email = requestHeaders.get(USER_EMAIL_HEADER);
   if (!userId || !email) return null;

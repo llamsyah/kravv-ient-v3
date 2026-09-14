@@ -2,7 +2,7 @@ import {z} from 'zod';
 import {identity,readState,saveState,failure} from '@/lib/storage';
 import {Case,addEvent,analyze,evidenceStates,stages,timestamp,uid} from '@/lib/model';
 export const dynamic='force-dynamic';
-export async function GET(){try{const user=await identity();return Response.json({state:await readState(user.userId),user:{name:user.displayName,email:user.email,local:user.userId.startsWith('local_')}},{headers:{'Cache-Control':'no-store'}})}catch(e){return failure(e)}}
+export async function GET(){try{const user=await identity();return Response.json({state:await readState(user.userId),user:{name:user.displayName,email:user.email,local:Boolean(user.localAccess),workspaceId:user.workspaceId,localAccess:user.localAccess}},{headers:{'Cache-Control':'no-store'}})}catch(e){return failure(e)}}
 const input=z.object({action:z.string(),revision:z.number().int().nonnegative(),caseId:z.string().optional(),payload:z.record(z.unknown()).default({})});
 export async function POST(request:Request){try{
  const user=await identity();const origin=request.headers.get('origin');if(origin&&origin!==new URL(request.url).origin)throw new Error('VALIDATION:Invalid request origin.');
