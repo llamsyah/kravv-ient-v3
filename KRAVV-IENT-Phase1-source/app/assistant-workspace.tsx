@@ -1,21 +1,23 @@
 'use client';
 
-import {useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {ArrowRight, FileText} from 'lucide-react';
 import type {Case,Company,Evidence} from '@/lib/model';
 import {date} from './ui';
+import {resolveDemoIntent,type AssistantIntent} from './assistant-intents';
 
-type Intent='summary'|'unknowns'|'challenge'|'changes';
 type Props={c:Case;company:Company;onTab:(tab:string)=>void;onEvidence:(entry:Evidence)=>void};
+type Turn={id:number;question:string;intent:AssistantIntent|null};
+const fallback='Live intelligence is not connected yet. This prototype can currently summarize the case, surface critical unknowns, challenge the recorded thesis, or compare saved analysis runs.';
 
-const starters:{id:Intent;label:string;prompt:string}[]=[
+const starters:{id:AssistantIntent;label:string;prompt:string}[]=[
   {id:'summary',label:'Summarize this case',prompt:'Summarize the current investment case.'},
   {id:'unknowns',label:'Surface critical unknowns',prompt:'What remains unknown?'},
   {id:'challenge',label:'Challenge the thesis',prompt:'Challenge the current thesis.'},
   {id:'changes',label:'Compare analysis runs',prompt:'What changed since the previous analysis run?'},
 ];
 
-function demoAnswer(c:Case,company:Company,intent:Intent){
+function demoAnswer(c:Case,company:Company,intent:AssistantIntent){
   const unresolved=c.questions.filter(q=>q.status!=='Resolved');
   const flagged=c.evidence.filter(e=>e.status==='Unknown'||e.status==='Conflicting');
   switch(intent){
@@ -42,11 +44,9 @@ function demoAnswer(c:Case,company:Company,intent:Intent){
   }
 }
 
-export default function AssistantWorkspace({c,company,onTab,onEvidence}:Props){
-  const [intent,setIntent]=useState<Intent|null>(null);
-  const selected=starters.find(item=>item.id===intent);
-  const answer=intent?demoAnswer(c,company,intent):null;
-  const unresolved=c.questions.filter(q=>q.status!=='Resolved').length;
+function DemoResponse({c,company,intent,onTab,onEvidence}:Props&{intent:AssistantIntent|null}){
+  if(!intent)return <article className="assistant-answer assistant-fallback"><div className="assistant-answer-label"><span>LOCAL DEMO RESPONSE</span><strong>No live model</strong></div><section><h3>Answer</h3><p>{fallback}</p></section></article>;
+  const answer=demoAnswer(c,company,intent);
   const sources=c.docs.length;
   const latest=c.runs[0];
   const references=intent==='unknowns'||intent==='challenge'
@@ -54,36 +54,55 @@ export default function AssistantWorkspace({c,company,onTab,onEvidence}:Props){
     : intent==='changes'
       ? latest?.evidence.slice(0,3)??[]
       : c.evidence.slice(0,3);
+  return <article className="assistant-answer"><div className="assistant-answer-label"><span>LOCAL DEMO RESPONSE</span><strong>Recorded case fields · no model response</strong></div>
+    <section><h3>Answer</h3><p>{answer.answer}</p></section>
+    <section><h3>Evidence / basis</h3><p>Current case record: {c.evidence.length} structured evidence {c.evidence.length===1?'entry':'entries'}, {sources} source {sources===1?'document':'documents'}, {c.runs.length} saved analysis {c.runs.length===1?'run':'runs'}.</p>
+      {references.length?<ul className="assistant-references">{references.map(entry=>{
+        const document=c.docs.find(doc=>doc.id===entry.documentId);
+        return <li key={entry.id}><button type="button" onClick={()=>onEvidence(entry)}><FileText size={16} aria-hidden="true"/><span><b>{entry.label}</b><small>{entry.status} · {document?.name||entry.source||'No document linked'}{entry.locator?` · ${entry.locator}`:''}</small></span><ArrowRight size={15} aria-hidden="true"/></button></li>;
+      })}</ul>:<p className="assistant-no-references">No evidence references are recorded for this view. <button type="button" className="text-button" onClick={()=>onTab('Evidence')}>Open evidence</button></p>}
+    </section>
+    <section><h3>Limitation</h3><p>{answer.limitation}</p></section>
+    <div className="assistant-suggestion"><small>Suggestion · not saved</small><p>{answer.suggestion}</p></div>
+  </article>;
+}
+
+export default function AssistantWorkspace({c,company,onTab,onEvidence}:Props){
+  const [draft,setDraft]=useState('');
+  const [turns,setTurns]=useState<Turn[]>([]);
+  const conversationRef=useRef<HTMLDivElement>(null);
+  useEffect(()=>{conversationRef.current?.scrollTo({top:conversationRef.current.scrollHeight,behavior:'smooth'})},[turns.length]);
+  const unresolved=c.questions.filter(q=>q.status!=='Resolved').length;
+  const sources=c.docs.length;
+  const latest=c.runs[0];
+  function sendMessage(value:string){
+    const question=value.trim();
+    if(!question)return;
+    setTurns(previous=>[...previous,{id:(previous.at(-1)?.id??0)+1,question,intent:resolveDemoIntent(question)}]);
+    setDraft('');
+  }
 
   return <section className="case-assistant" aria-label="Investment Case Assistant demonstration">
     <header className="assistant-heading">
       <div><p className="assistant-kicker">CASE INTELLIGENCE INTERFACE</p><h2>Assistant</h2><p>{company.name} <span aria-hidden="true">/</span> {c.name}</p></div>
       <span className="assistant-prototype">UI PROTOTYPE · NO LIVE MODEL</span>
     </header>
-    <p className="assistant-intro">Future responses will be grounded in this Investment Case, its recorded evidence, source references and saved analysis runs. This preview does not generate a live answer.</p>
+    <p className="assistant-intro">Future responses will be grounded in this Investment Case, its recorded evidence, source references and saved analysis runs. Messages here stay in this browser view and receive only local demonstration responses.</p>
     <div className="assistant-grid">
       <div className="assistant-main">
-        {!selected?<section className="assistant-welcome">
+        {!turns.length?<section className="assistant-welcome">
           <p className="assistant-kicker">START WITH THIS CASE</p>
           <h3>Explore the questions behind the decision.</h3>
-          <p>Select an intent to preview how a case-grounded answer could be organized. Nothing is sent or saved.</p>
-          <div className="assistant-starters">{starters.map(item=><button key={item.id} type="button" onClick={()=>setIntent(item.id)}>{item.label}<ArrowRight size={16} aria-hidden="true"/></button>)}</div>
-        </section>:<div className="assistant-conversation" aria-live="polite">
-          <div className="assistant-exchange-top"><span className="assistant-kicker">DEMONSTRATION EXCHANGE</span><button type="button" className="text-button" onClick={()=>setIntent(null)}>Back to starter actions</button></div>
-          <div className="assistant-prompt"><small>EXAMPLE QUESTION</small><p>{selected.prompt}</p></div>
-          <article className="assistant-answer"><div className="assistant-answer-label"><span>ASSISTANT RESPONSE FORMAT</span><strong>Static UI example · no model response</strong></div>
-            <section><h3>Answer</h3><p>{answer?.answer}</p></section>
-            <section><h3>Evidence / basis</h3><p>Current case record: {c.evidence.length} structured evidence {c.evidence.length===1?'entry':'entries'}, {sources} source {sources===1?'document':'documents'}, {c.runs.length} saved analysis {c.runs.length===1?'run':'runs'}.</p>
-              {references.length?<ul className="assistant-references">{references.map(entry=>{
-                const document=c.docs.find(doc=>doc.id===entry.documentId);
-                return <li key={entry.id}><button type="button" onClick={()=>onEvidence(entry)}><FileText size={16} aria-hidden="true"/><span><b>{entry.label}</b><small>{entry.status} · {document?.name||entry.source||'No document linked'}{entry.locator?` · ${entry.locator}`:''}</small></span><ArrowRight size={15} aria-hidden="true"/></button></li>;
-              })}</ul>:<p className="assistant-no-references">No evidence references are recorded for this view. <button type="button" className="text-button" onClick={()=>onTab('Evidence')}>Open evidence</button></p>}
-            </section>
-            <section><h3>Limitation</h3><p>{answer?.limitation}</p></section>
-            <div className="assistant-suggestion"><small>Suggestion · not saved</small><p>{answer?.suggestion}</p></div>
-          </article>
+          <p>Select an intent or write your own question. Replies use local demo behavior; nothing is sent or saved.</p>
+          <div className="assistant-starters">{starters.map(item=><button key={item.id} type="button" onClick={()=>sendMessage(item.prompt)}>{item.label}<ArrowRight size={16} aria-hidden="true"/></button>)}</div>
+        </section>:<div className="assistant-conversation" ref={conversationRef} aria-live="polite">
+          <div className="assistant-exchange-top"><span className="assistant-kicker">LOCAL DEMO CONVERSATION</span><button type="button" className="text-button" onClick={()=>setTurns([])}>New local conversation</button></div>
+          {turns.map(turn=><div className="assistant-turn" key={turn.id}>
+            <div className="assistant-prompt"><small>YOU · LOCAL ONLY</small><p>{turn.question}</p></div>
+            <DemoResponse c={c} company={company} intent={turn.intent} onTab={onTab} onEvidence={onEvidence}/>
+          </div>)}
         </div>}
-        <div className="assistant-composer"><label htmlFor="assistant-demo-composer">Ask about this case</label><textarea id="assistant-demo-composer" disabled rows={2} placeholder="Live intelligence not connected"/><div><span>Live intelligence not connected · Preview only</span><button type="button" disabled>Send</button></div></div>
+        <div className="assistant-composer"><label htmlFor="assistant-demo-composer">Ask about this case</label><textarea id="assistant-demo-composer" rows={2} value={draft} onChange={event=>setDraft(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();sendMessage(draft)}}} placeholder="Type a question about this case…"/><div><span>Live intelligence not connected · Enter to send · Shift+Enter for a new line</span><button type="button" disabled={!draft.trim()} onClick={()=>sendMessage(draft)}>Send</button></div></div>
       </div>
       <aside className="assistant-inspector" aria-label="Current case context">
         <div className="assistant-inspector-head"><p className="assistant-kicker">GROUNDING INSPECTOR</p><h3>Current case context</h3><p>Saved records available in this workspace</p></div>
