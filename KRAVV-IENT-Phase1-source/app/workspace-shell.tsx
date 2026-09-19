@@ -4,7 +4,7 @@ import type {ReactNode, RefObject} from 'react';
 import {LayoutDashboard, Layers, Building2, Briefcase, Files, Settings, Search, ChevronRight} from 'lucide-react';
 
 const destinations = [['Dashboard', LayoutDashboard], ['Deal Flow', Layers], ['Companies', Building2], ['Portfolio', Briefcase], ['Documents', Files], ['Settings', Settings]] as const;
-export const caseTabs = ['Overview', 'Evidence', 'Analysis', 'Diligence', 'Decision', 'Activity'];
+export const caseTabs = ['Overview', 'Evidence', 'Analysis', 'Assistant', 'Diligence', 'Decision', 'Activity'];
 
 type ShellProps = {
   children: ReactNode;
