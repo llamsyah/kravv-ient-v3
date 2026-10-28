@@ -1,3 +1,5 @@
+import type {GeminiRunData} from './gemini-analysis';
+import type {MinimumRunData} from './minimum-analysis';
 export const stages=['Sourced','Screening','Evaluation','Due Diligence','IC Review','Passed','Monitor','Invested'] as const;
 export const evidenceStates=['Reported','Supported','Verified','Conflicting','Unknown'] as const;
 export type EvidenceStatus=typeof evidenceStates[number];
@@ -6,8 +8,8 @@ export type Evidence={id:string;label:string;value:string;status:EvidenceStatus;
 export type Doc={id:string;name:string;type:string;source:string;size:number;createdAt:string;author:string;processing:string;sampleText?:string};
 export type Question={id:string;text:string;category:string;priority:string;owner:string;status:string;trigger:string;resolution:string;createdAt:string};
 export type Judgment={id:string;outcome:string;rationale:string;author:string;createdAt:string;participants?:string;runId?:string};
-export type Finding={id:string;dimension:string;observation:string;interpretation:string;confidence:string;counterargument:string;evidenceIds:string[]};
-export type Run={id:string;name:string;createdAt:string;version:string;assessment:string;evidence:Evidence[];findings:Finding[];simulated:boolean};
+export type Finding={id:string;dimension:string;observation:string;interpretation:string;confidence:string;counterargument:string;evidenceIds:string[];documentIds?:string[]};
+export type Run={id:string;name:string;createdAt:string;version:string;assessment:string;evidence:Evidence[];findings:Finding[];simulated:boolean;gemini?:GeminiRunData;minimum?:MinimumRunData};
 export type Event={id:string;createdAt:string;author:string;text:string};
 export type Case={id:string;companyId:string;name:string;stage:string;investmentStage:string;owner:string;thesis:string;strategy:string;roundSize:string;checkSize:string;valuation:string;source:string;lead:string;notes:string;createdAt:string;docs:Doc[];evidence:Evidence[];runs:Run[];questions:Question[];reviews:Judgment[];recommendations:Judgment[];decisions:Judgment[];activity:Event[];portfolio?:{date:string;ownership:string;valuation:string;thesis:string;updates:{id:string;date:string;type:string;expected:string;actual:string;note:string;author:string}[]}};
 export type WorkspaceState={revision:number;role:'Analyst'|'Partner'|'Admin';companies:Company[];cases:Case[]};

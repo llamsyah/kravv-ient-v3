@@ -1,0 +1,37 @@
+# Local secrets; keep empty configuration examples publishable.
+.env*
+.dev.vars*
+!.env.example
+!.env.*.example
+!.dev.vars.example
+*.pem
+*.key
+
+# Dependencies, generated outputs and checkout-local tool state.
+node_modules/
+.next/
+.vinext/
+dist/
+out/
+coverage/
+.wrangler/
+.sites-runtime/
+.agents/
+.codex/
+outputs/
+work/
+tmp/
+*.tsbuildinfo
+*.log
+
+# Private runtime/QA artifacts, not application fixtures or source documents.
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.db
+*.private.json
+*.private.md
+*.private.txt
+*.private.pdf
+.DS_Store
+Thumbs.db

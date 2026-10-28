@@ -1,3 +1,4 @@
+import {localeFromCookie} from '../lib/localization.mjs';
 import type {IncomingMessage, ServerResponse} from 'node:http';
 import {randomBytes} from 'node:crypto';
 import type {ViteDevServer} from 'vite';
@@ -55,6 +56,7 @@ export function installAccessGate(server: ViteDevServer, root: string) {
   server.middlewares.use((request, response, next) => {
     // Drop client-supplied identity hints before any host/origin or session decision.
     for (const name of Object.keys(request.headers)) if (name.startsWith('oai-authenticated-user-') || name.startsWith('x-kravv-')) removeHeader(request, name);
+    const renderLocalized=(view:string,options:Record<string,string>={},status=200)=>render(response,view,{...options,locale:localeFromCookie(request.headers.cookie || '')},status);
     const handle = async () => {
       let url: URL;
       try {
@@ -106,7 +108,7 @@ export function installAccessGate(server: ViteDevServer, root: string) {
       if (!['entry','initialize','login','recover','legacy','signout','continue'].includes(view)) { response.statusCode = 404; response.end(); return; }
       if (request.method === 'GET') {
         if (identity && ['entry','login','initialize','continue'].includes(view)) { redirect(response); return; }
-        render(response, view === 'continue' ? 'entry' : view); return;
+        renderLocalized(view === 'continue' ? 'entry' : view); return;
       }
       if (request.method !== 'POST' || view === 'entry') { response.statusCode = 405; response.setHeader('Allow','GET, POST'); response.end(); return; }
       let form = new URLSearchParams();
@@ -140,18 +142,18 @@ export function installAccessGate(server: ViteDevServer, root: string) {
           cookie(SESSION_COOKIE,result.session,secure,SESSION_SECONDS), cookie(DEVICE_COOKIE,result.device,secure,DEVICE_SECONDS),
           cookie(LEGACY_COOKIE,'',secure), cookie('__sites_local_auth','',secure),
         ]);
-        if (view === 'initialize' && 'recoveryKey' in result) render(response, 'created', {id: result.workspaceId, operator: result.operator, recoveryKey: String(result.recoveryKey)}, 201);
+        if (view === 'initialize' && 'recoveryKey' in result) renderLocalized('created', {id: result.workspaceId, operator: result.operator, recoveryKey: String(result.recoveryKey)}, 201);
         else redirect(response);
       } catch (error) {
         if (!(error instanceof AccessError)) throw error;
         const show = error.code === 'RECOVERY_REQUIRED' ? 'recover' : view === 'continue' ? 'login' : view;
-        render(response, show, {error: error.message, id: (form.get('workspaceId') ?? '').slice(0,32), operator: (form.get('operator') ?? '').slice(0,80)}, error.status);
+        renderLocalized(show, {error: error.message, id: (form.get('workspaceId') ?? '').slice(0,32), operator: (form.get('operator') ?? '').slice(0,80)}, error.status);
       }
     };
     void handle().catch(error => {
       // Never log request bodies, credentials, cookies or recovery material.
       server.config.logger.error(`Access Gate unavailable: ${error instanceof AccessError ? error.code : 'LOCAL_STORAGE_ERROR'}`);
-      if (!response.headersSent) render(response, 'entry', {error: 'Local access storage is unavailable. Keep your local data files and inspect the development server.'}, 503);
+      if (!response.headersSent) renderLocalized('entry', {error: 'Local access storage is unavailable. Keep your local data files and inspect the development server.'}, 503);
       else response.end();
     });
   });

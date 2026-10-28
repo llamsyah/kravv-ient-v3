@@ -1,0 +1,29 @@
+// QA only. Copy the real adapter to gemini-provider.actual.server.ts in an isolated
+// workspace, then install this wrapper as gemini-provider.server.ts there.
+// Never install in the original workspace. No body inspection, clones or retries.
+import {callGemini as actualCall, readGeminiConfig} from './gemini-provider.actual.server';
+import type {GeminiConfig, GeminiProviderInput} from './gemini-provider.actual.server';
+import {createGeminiDiagnostics, diagnosticFailure, isDiagnosticAbort} from './gemini-diagnostics.server';
+import type {GeminiDiagnostics} from './gemini-diagnostics.server';
+export {readGeminiConfig};
+let generationRequests = 0;
+export async function callGemini(input: GeminiProviderInput, config: GeminiConfig, transport: typeof fetch = fetch, trace: GeminiDiagnostics = createGeminiDiagnostics()) {
+  const observed: typeof fetch = async (url, options) => {
+    if (typeof url !== 'string' || !url.startsWith('https://generativelanguage.googleapis.com/v1beta/models/') || url.includes('?')) throw new Error('QA_DESTINATION_REJECTED');
+    const generation = options?.method === 'POST';
+    if (generation && ++generationRequests > 1) throw new Error('QA_GENERATION_LIMIT');
+    const span = trace.begin(generation ? 'qa_generation_headers' : 'qa_metadata_headers', {headersReceived: false, bodyComplete: false});
+    try {
+      const response = await transport(url, options);
+      const fields = {providerHttpStatus: response.status, headersReceived: true, bodyComplete: false};
+      // Record headers immediately, before returning the original response. Body
+      // ownership and cancellation remain entirely with the actual adapter.
+      span.end('completed', fields);
+      return trace.sync('qa_response_processing', () => response, fields);
+    } catch (error) {
+      span.end(options?.signal?.aborted || isDiagnosticAbort(error) ? 'aborted' : 'failed', {...diagnosticFailure(error), signalAborted: options?.signal?.aborted === true});
+      throw error;
+    }
+  };
+  return actualCall(input, config, observed, trace);
+}

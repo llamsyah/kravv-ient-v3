@@ -1,0 +1,37 @@
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {readFile} from 'node:fs/promises';
+import {fileURLToPath} from 'node:url';
+import {localeFromCookie,localeCookie,resolveLocale,translate,localizeError,formatNumber,formatDate,formatCurrency} from '../lib/localization.mjs';
+import {gatePage} from '../build/access-pages.mjs';
+import messages from '../lib/localization-messages.json' with {type:'json'};
+const require=createRequire(import.meta.url),{build}=require('esbuild');
+assert.equal(resolveLocale(undefined),'id-ID');assert.equal(resolveLocale('bad'),'id-ID');
+assert.equal(localeFromCookie('kravv-locale=en-US'),'en-US');assert.equal(localeFromCookie('kravv-locale=en-US; kravv-locale=id-ID'),'id-ID');assert.equal(localeFromCookie('kravv-locale=fr-FR'),'id-ID');assert.throws(()=>localeCookie('bad'));
+assert.equal(translate('id-ID','Companies'),'Perusahaan');assert.equal(translate('en-US','Companies'),'Companies');assert.equal(translate('id-ID','Open {id}',{id:'CASE-QA'}),'Buka CASE-QA');assert.equal(translate('id-ID','missing.key'),'Teks belum tersedia.');
+for(const [key,value]of Object.entries(messages)){assert.ok(value.trim(),key);assert.deepEqual([...key.matchAll(/\{(\w+)\}/g)].map(x=>x[1]).sort(),[...value.matchAll(/\{(\w+)\}/g)].map(x=>x[1]).sort(),key);}
+assert.equal(formatNumber('id-ID',1234.56),'1.234,56');assert.equal(formatNumber('en-US',1234.56),'1,234.56');assert.notEqual(formatDate('id-ID','2026-08-01'),formatDate('en-US','2026-08-01'));assert.ok(formatCurrency('id-ID',1000,'IDR').includes('1.000'));
+assert.equal(localizeError('id-ID','Please complete owner.'),'Lengkapi Penanggung jawab.');assert.ok(localizeError('id-ID','fictional.pdf exceeds the 10 MiB analysis input limit. The original upload remains available.').includes('melampaui batas'));assert.ok(!localizeError('id-ID','untrusted-provider-secret').includes('secret'));
+for(const locale of ['id-ID','en-US'])for(const view of ['entry','initialize','login','recover','created','legacy','signout']){
+ const html=gatePage(view,{locale,operator:'Dashboard source name',id:'KVI-TEST-TEST',recoveryKey:'fictional-only',nonce:'qa'});
+ assert.ok(html.includes(`lang="${locale}"`));for(const match of html.matchAll(/data-i18n="([^"]+)"/g)){const key=match[1].replaceAll('&#39;',"'").replaceAll('&quot;','"').replaceAll('&amp;','&');assert.ok(Object.hasOwn(messages,key),key);}
+ new Function(html.match(/<script[^>]*>([\s\S]*)<\/script>/)[1]);
+ if(view==='created'){assert.ok(html.includes('Dashboard source name'));assert.ok(html.includes('value="fictional-only"'));}
+ assert.ok(html.includes(locale==='id-ID'?'Bahasa':'Language'));
+}
+const result=await build({stdin:{contents:`import React from 'react';import{renderToStaticMarkup}from'react-dom/server';import{LocaleProvider}from'./app/localization';import{WorkspaceShell}from'./app/workspace-shell';import Analysis from'./app/analysis-workspace';import SignIn from'./app/sign-in';import{seed}from'./lib/fixtures';import * as forms from './app/forms';export function formSpecs(){const c=seed().cases[0];return [forms.caseForm('QA'),forms.contextForm(c),forms.stageForm(c),forms.uploadForm(),forms.evidenceForm(c),forms.analysisForm(),forms.questionForm(c),...['review','recommendation','decision'].map(k=>forms.judgmentForm(k)),forms.portfolioForm(),forms.monitoringForm(c)];}export function render(locale,view){const s=seed(),c=s.cases[0],noop=()=>{};const r={...c.runs[0],id:'QA-HISTORICAL',name:'Original English Run',version:'gemini-text:gemini-3.5-flash-lite:minimum-pdf-text-v1',assessment:'Saved original text: Ringkasan Eksekutif / Executive Summary / Rp 5,76 M',simulated:false,evidence:[],findings:[]};const node=view==='signin'?<SignIn signInHref='/signin-with-chatgpt?return_to=%2F'/>:view==='analysis'?<Analysis c={{...c,runs:[r]}} run={r} busy={false} showReadiness={false} onReadiness={noop} onSelectRun={noop} onRun={async()=>false} onGemini={async()=>({saved:false})} onEvidence={noop} onReview={noop} onQuestion={noop} onTab={noop}/>:view==='readiness'?<Analysis c={c} busy={false} showReadiness={true} onReadiness={noop} onSelectRun={noop} onRun={async()=>false} onGemini={async()=>({saved:false})} onEvidence={noop} onReview={noop} onQuestion={noop} onTab={noop}/>:<WorkspaceShell area='Companies' activeCases={3} userName='Companies user data' role='Analyst' query='Untranslated search' searchRef={{current:null}} onSearch={noop} onNavigate={noop}><p>Original company notes</p></WorkspaceShell>;return renderToStaticMarkup(<LocaleProvider initialLocale={locale}>{node}</LocaleProvider>);}`,loader:'tsx',resolveDir:fileURLToPath(new URL('../',import.meta.url))},bundle:true,write:false,format:'cjs',platform:'node',external:['react','react-dom/server']});
+const loaded={exports:{}};new Function('require','module','exports',result.outputFiles[0].text)(require,loaded,loaded.exports);
+for(const spec of loaded.exports.formSpecs())for(const key of [spec.title,spec.description,...spec.fields.flatMap(f=>[f.label,...(f.options||[]),...(f.choices||[]).filter(o=>o.translate).map(o=>o.label)])])assert.ok(Object.hasOwn(messages,key),'Missing form translation: '+key);
+for(const locale of ['id-ID','en-US']){
+ const shell=loaded.exports.render(locale,'shell');assert.ok(shell.includes('Companies user data')&&shell.includes('Untranslated search')&&shell.includes('Original company notes'));assert.ok(shell.includes(locale==='id-ID'?'Perusahaan':'Companies'));
+ const run=loaded.exports.render(locale,'analysis');assert.ok(run.includes('Original English Run'));assert.ok(run.includes('Saved original text: Ringkasan Eksekutif / Executive Summary / Rp 5,76 M'));assert.ok(run.includes(locale==='id-ID'?'Tinjau analisis':'Review analysis'));
+ const readiness=loaded.exports.render(locale,'readiness');assert.ok(readiness.includes('value="Initial Screening"'));assert.ok(readiness.includes(locale==='id-ID'?'Jalankan analisis PDF Gemini':'Run Gemini PDF analysis'));
+ const signin=loaded.exports.render(locale,'signin');assert.ok(signin.includes(locale==='id-ID'?'Masuk dengan ChatGPT':'Sign in with ChatGPT'));
+}
+// Complete active-screen literal coverage, with explicit non-translated identifiers.
+const ts=require('typescript'),allowed=new Set(['K','KRAVV','-IENT','KRAVV-IENT','PoC / v0.1','MiB','⌘ / Ctrl K']);
+for(const file of ['workspace','workspace-shell','analysis-workspace','surface-ui','ui','document-readiness','gemini-result','sign-in']){
+ const source=await readFile(new URL('../app/'+file+'.tsx',import.meta.url),'utf8'),ast=ts.createSourceFile(file+'.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+ function check(n){if(ts.isJsxText(n)&&/[A-Za-z]/.test(n.text))assert.ok(allowed.has(n.text.trim()),file+': '+n.text);if(ts.isJsxAttribute(n)&&/^(title|detail|description|placeholder|aria-label)$/.test(n.name.getText(ast))&&n.initializer&&ts.isStringLiteral(n.initializer))assert.fail(file+': untranslated attribute '+n.initializer.text);ts.forEachChild(n,check);}check(ast);
+}
+console.log(JSON.stringify({passed:true,checks:['locale allowlist/default/cookie round trip','typed dictionary placeholder parity and readable fallback','localized dates/numbers/currency and errors','all seven Access Gate views in both languages with valid inline scripts','shell, sign-in, analysis/readiness rendering in both locales','historical and user text unchanged','active UI literal coverage'],realGenerationRequests:0},null,2));

@@ -1,0 +1,18 @@
+import messages from './localization-messages.json';
+export type Locale = 'id-ID' | 'en-US';
+export type MessageKey = keyof typeof messages;
+export type MessageParams = Record<string, string | number>;
+export const SUPPORTED_LOCALES: readonly Locale[];
+export const DEFAULT_LOCALE: Locale;
+export const LOCALE_COOKIE: string;
+export function isLocale(value: unknown): value is Locale;
+export function resolveLocale(value: unknown): Locale;
+export function localeFromCookie(cookie?: string): Locale;
+export function localeCookie(locale: Locale, secure?: boolean): string;
+export function hasMessage(key: unknown): key is MessageKey;
+export function translate(locale: Locale, key: MessageKey, params?: MessageParams): string;
+export function localizeLabel(locale: Locale, text: string): string;
+export function localizeError(locale: Locale, message: unknown): string;
+export function formatDate(locale: Locale, value: string, time?: boolean): string;
+export function formatNumber(locale: Locale, value: number, options?: Intl.NumberFormatOptions): string;
+export function formatCurrency(locale: Locale, value: number, currency: string): string;

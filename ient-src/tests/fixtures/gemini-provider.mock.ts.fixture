@@ -1,0 +1,13 @@
+// QA_ONLY_MOCK_PROVIDER — copy only into lib/ in an isolated QA source copy.
+import {GeminiError} from './gemini-analysis';
+import type {GeminiProviderInput} from './gemini-provider.actual.server';
+export {readGeminiConfig} from './gemini-provider.actual.server';
+export async function callGemini(input:GeminiProviderInput){
+ const mode=input.provenance.caseContext.notes||'';
+ if(mode==='QA_MODE=quota')throw new GeminiError('QUOTA_EXCEEDED','Mock quota exhausted; no automatic retry.',429);
+ if(mode==='QA_MODE=timeout')throw new GeminiError('TIMEOUT','Mock timeout; no automatic retry.',504);
+ if(mode==='QA_MODE=slow')await new Promise(resolve=>setTimeout(resolve,300));
+ const ids=input.pdfs.documents.map(d=>d.documentId);
+ const result={executiveSummary:'Fictional startup reports early industrial software revenue; human diligence is required.',businessOverview:'Fictional SaaS for small factories.',findings:[{observation:'The fictional PDF reports ARR USD 100000 and 12 paying customers.',interpretation:'This suggests early commercial traction, not proof of retention.',uncertainty:'No independent verification or margins are available.',counterargument:'Pilot deployments may not renew.',documentIds:mode==='QA_MODE=bad-reference'?['invented-document']:ids,evidenceIds:[]}],risks:[{description:'Retention risk.',uncertainty:'No renewal history.',documentIds:ids}],missingInformation:['Retention and margins are missing.'],diligenceQuestions:[{question:'Can customer retention be independently corroborated?',documentIds:ids}]};
+ return {result:mode==='QA_MODE=bad-json'?{}:result,modelVersion:'qa-mock-provider',usage:{promptTokens:100,outputTokens:100,totalTokens:200}};
+}

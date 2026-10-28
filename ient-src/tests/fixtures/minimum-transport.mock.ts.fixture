@@ -1,0 +1,17 @@
+// QA-only transport replacement. Never install into the original repository's
+// route. The private recorded envelope is supplied only in ignored QA dev vars.
+import {env} from 'cloudflare:workers';
+import {Buffer} from 'node:buffer';
+export const minimumQaTransport: typeof fetch = async (url, options) => {
+  if (String(url) !== 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent' || options?.method !== 'POST' || options.redirect !== 'manual') throw new Error('QA_TRANSPORT_REJECTED');
+  const request=JSON.parse(String(options.body));
+  const parts=request.contents?.[0]?.parts;
+  if (JSON.stringify(Object.keys(request.generationConfig)) !== '["maxOutputTokens"]' || request.generationConfig.maxOutputTokens !== 8192 || !Array.isArray(parts) || parts.length<4 || parts.length>12 || (parts.length-2)%2 || typeof parts[0].text!=='string' || typeof parts.at(-1).text!=='string') throw new Error('QA_CONTRACT_REJECTED');
+  const ids:string[]=[];let totalBytes=0;
+  for(let i=1;i<parts.length-1;i+=2){const label=JSON.parse(parts[i].text),pdf=parts[i+1].inlineData;if(label.sourceLabel!==`SOURCE-${(i+1)/2}`||typeof label.documentId!=='string'||typeof label.originalFilename!=='string'||pdf?.mimeType!=='application/pdf')throw new Error('QA_SOURCE_REJECTED');ids.push(label.documentId);const bytes=Buffer.from(pdf.data,'base64');if(!bytes.subarray(0,5).equals(Buffer.from('%PDF-'))||bytes.length>10*1024*1024)throw new Error('QA_PDF_REJECTED');totalBytes+=bytes.length;}
+  if(new Set(ids).size!==ids.length||totalBytes>12*1024*1024||Buffer.byteLength(String(options.body))>20_000_000)throw new Error('QA_LIMIT_REJECTED');
+  console.info('MINIMUM_QA_TRANSPORT ' + JSON.stringify({intercepted:true,model:'gemini-3.5-flash-lite',realNetwork:false}));
+  const captured=(env as unknown as {MINIMUM_QA_RESPONSE_BASE64?:string}).MINIMUM_QA_RESPONSE_BASE64;
+  if(!captured)throw new Error('QA_CAPTURE_MISSING');
+  return Response.json(JSON.parse(Buffer.from(captured,'base64').toString('utf8')));
+};
