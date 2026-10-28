@@ -6,6 +6,7 @@ import "./globals.css";
 import "./surface.css";
 import "./analysis.css";
 import "./analysis-report.css";
+import "./analysis-history.css";
 import "./settings.css";
 import "./workflow.css";
 

@@ -25,7 +25,7 @@ export type GeminiRunData = {
   input: GeminiProvenance; result: GeminiResult;
   usage?: {promptTokens?: number; outputTokens?: number; totalTokens?: number};
 };
-export type GeminiActionResult = {saved: boolean; error?: string; code?: string};
+export type GeminiActionResult = {saved: boolean; runId?: string; error?: string; code?: string};
 export class GeminiError extends Error {
   constructor(public code: string, message: string, public status = 400) {super(message); this.name = 'GeminiError';}
 }
