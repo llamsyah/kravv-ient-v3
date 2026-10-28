@@ -21,5 +21,5 @@ export function EvidenceSummary({entries,compact=false}:{entries:Evidence[];comp
 
 export function EvidenceGuide() {
  const {t}=useI18n();
-  return <details className="domain-note"><summary>{t("How evidence status is recorded")}</summary><p>{t("Reported captures a source claim. Supported indicates additional evidence; Verified indicates confirmation through a reliable source. Conflicting keeps disagreement visible, while Unknown marks missing information. These statuses are assigned by a person in this PoC.")}</p></details>;
+  return <details className="domain-note"><summary>{t("How evidence status is recorded")}</summary><p>{t("Reported captures a source claim. Supported indicates additional evidence; Verified indicates confirmation through a reliable source. Conflicting keeps disagreement visible, while Unknown marks missing information. These statuses are assigned by a person in this PoC.")}</p><p>{t('A claim may need several sources. The existing ledger records one primary document per entry; note additional references in the excerpt or locator. No multi-source verification is performed automatically.')}</p></details>;
 }

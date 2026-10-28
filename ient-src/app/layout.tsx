@@ -6,6 +6,8 @@ import "./globals.css";
 import "./surface.css";
 import "./analysis.css";
 import "./analysis-report.css";
+import "./settings.css";
+import "./workflow.css";
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = localeFromCookie((await headers()).get('cookie') || '');

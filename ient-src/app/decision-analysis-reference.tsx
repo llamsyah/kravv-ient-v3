@@ -9,7 +9,7 @@ export default function DecisionAnalysisReference({run,reviews,onOpen}: {run?:Ru
   const {t,date}=useI18n(),excerpt=useMemo(()=>run?preliminaryExcerpt(run):undefined,[run]);
   const reviewed=Boolean(run&&reviews.some(review=>review.runId===run.id));
   return <section className="panel judgment ai decision-analysis-reference">
-    <p className="eyebrow">{t('AI Analysis')}</p>
+    <p className="eyebrow">{t(run?.simulated?'Legacy simulation reference':'AI Analysis')}</p>
     {run?<><h3>{run.name}</h3><small>{date(run.createdAt)} · {runProvenance(run).model || run.version}</small><div className="actions"><Badge>{run.simulated!==false?t('Simulated · PoC'):t('Saved analysis')}</Badge><Badge>{reviewed?t('Human Review recorded'):t('Awaiting review')}</Badge></div>
       {excerpt?<><p className="decision-excerpt-label">{t('Excerpt from the saved preliminary assessment')}</p><blockquote>{excerpt}</blockquote></>:<p>{run.assessment.trim()?t('Saved analysis is available for Human Review.'):t('No analysis text was recorded for this Run.')}</p>}
       <p className="muted">{t('AI findings are supporting input. Recommendations and final decisions are recorded separately by people.')}</p><button className="text-button" onClick={()=>onOpen(run)}>{t('View complete analysis')}</button>

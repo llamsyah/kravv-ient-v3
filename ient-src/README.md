@@ -30,6 +30,8 @@ Private local state is under `.wrangler/state` (D1/R2) and `.sites-runtime` (acc
 
 ## Verification and limitations
 
+Settings is implemented in `app/settings-workspace.tsx` and `app/settings.css`. `lib/ai-usage.ts` is a deterministic, immutable projection of authenticated, already loaded Saved Runs; it reads no private journals and makes no requests. `lib/settings-configuration.ts` exposes public read-only Minimum AI values, checked against the actual adapter by `tests/settings.mjs`. Aggregation and isolated ownership/persistence regressions are in `tests/ai-usage.mjs` and `tests/settings-workflow.mjs`. See the [M4.4 report](../milestone4.4-settings-ai-usage.md) for eligibility, deduplication, coverage and timeframe rules.
+
 [M4.3b](../milestone4.3b-multi-pdf-live-acceptance.md) records one successful real generation with two small fictional PDFs, saved output, source versions, reload, Human Review and idempotent replay. [M4.3a](../milestone4.3a-vinext-multipart-upload.md) records actual 2/10 MiB multipart uploads and retained limits. These do not establish production reliability or independent investment accuracy.
 
 Legacy `rules-v1` remains a deterministic manual-evidence simulation. Seed fixtures are fictional and initialize previously unseen owners only. Owner-switchable roles are permission demonstrations, not production administration. Local single-owner access, legacy compatibility, provisional case lifecycle and optional portfolio behavior retain their existing boundaries. No OCR, RAG, indexing, independent contradiction verification, calibrated confidence, autonomous decisions or production security certification is implemented.

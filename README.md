@@ -82,6 +82,8 @@ Relevant tests include `multipart-upload.mjs`, `document-readiness.mjs`, `multi-
 
 ## Prototype boundaries
 
+Settings provides General, AI Usage, read-only AI Configuration, Security & Access, and System & About. Usage is computed from unique, non-simulated Gemini Saved Runs already loaded for the authenticated workspace. Each token field has independent reporting coverage; missing usage stays unknown, and provider totals are not recomputed or treated as billing. All-time/30-day views and recent Run links use saved timestamps/provenance. Language uses the existing browser cookie; no provider request is made by Settings. See the [M4.4 implementation report](milestone4.4-settings-ai-usage.md).
+
 This is a desktop, single-owner workspace. Owner role switching demonstrates Analyst/Partner/Admin permission gates, not production role administration or collaborative tenancy. Access Gate is local development functionality. Production security certification, firm membership, calibrated investment scores, independent financial verification, advanced reconciliation, external research and autonomous decisions are outside the implemented scope. Human review must distinguish reported source statements from model inference.
 
 See [application architecture](ient-src/README.md), [M4.2 presentation](milestone4.2-analysis-workspace-presentation.md), [M4.3 multi-PDF implementation](milestone4.3-multi-pdf-analysis.md) and [M4.3a multipart verification](milestone4.3a-vinext-multipart-upload.md). Earlier milestone reports describe historical implementation states and failures. Local `doc/` references are not required to run the published application and are excluded from this publication.
