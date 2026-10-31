@@ -14,6 +14,8 @@ import {getMinimumAnalysisPrompt, PROMPT_LANGUAGES} from '@/lib/minimum-analysis
 import type {PromptLanguage} from '@/lib/minimum-analysis-prompt';
 import {PDF_INPUT_LIMITS} from '@/lib/document-input';
 import {MINIMUM_INPUT_VERSION, MULTI_PDF_CONTEXT} from '@/lib/minimum-analysis';
+import {buildInvestmentContext,investmentContextPart,isInvestmentContext,INVESTMENT_CONTEXT_VERSION} from '@/lib/investment-context';
+import type {InvestmentContextSnapshot} from '@/lib/investment-context';
 
 export const dynamic = 'force-dynamic';
 const minimumModel = 'gemini-3.5-flash-lite';
@@ -23,10 +25,15 @@ const saveSchema = z.object({action: z.literal('save'), caseId: z.string().min(1
 type SaveInput = z.infer<typeof saveSchema>;
 type User = {userId: string; displayName: string};
 type Envelope = {modelVersion?: unknown; usageMetadata?: {promptTokenCount?: unknown; candidatesTokenCount?: unknown; totalTokenCount?: unknown}; candidates?: {finishReason?: unknown; content?: {parts?: {text?: unknown; thought?: unknown}[]}}[]};
-type Provenance = {requestId: string; caseId: string; workspaceRevision: number; analysisName: string; company: Company; caseContext: {name: string; thesis: string}; documents: Omit<PreparedCasePdfInput['documents'][number], 'bytes'>[]; model: string; promptVersion: string; language?: PromptLanguage; instruction: string; sourceContext?: string; createdAt: string};
-type Journal = {status: 'started' | 'generated' | 'saved' | 'failed'; intent: string; intentVersion?: 'locale-v1' | typeof MINIMUM_INPUT_VERSION; provenance: Provenance; analysisText?: string; envelope?: Envelope; failure?: {code: string; message: string; status: number}; runId?: string};
+type Provenance = {requestId: string; caseId: string; workspaceRevision: number; analysisName: string; company?: Company; caseContext?: {name: string; thesis: string}; investmentContext?: InvestmentContextSnapshot; documents: Omit<PreparedCasePdfInput['documents'][number], 'bytes'>[]; model: string; promptVersion: string; language?: PromptLanguage; instruction: string; sourceContext?: string; createdAt: string};
+type Journal = {status: 'started' | 'generated' | 'saved' | 'failed'; intent: string; intentVersion?: 'locale-v1' | typeof MINIMUM_INPUT_VERSION | typeof INVESTMENT_CONTEXT_VERSION; provenance: Provenance; analysisText?: string; envelope?: Envelope; failure?: {code: string; message: string; status: number}; runId?: string};
 const journalKey = (user: User, requestId: string) => `${user.userId}/minimum-analysis/${requestId}.json`;
 const conflict = () => new GeminiError('REVISION_CONFLICT', 'The workspace changed. Reload and retry the same request to save its original response without another provider call.', 409);
+function pdfIntent(journal:Journal){return journal.intentVersion===MINIMUM_INPUT_VERSION||journal.intentVersion===INVESTMENT_CONTEXT_VERSION;}
+function validateJournalContext(journal:Journal){
+ if(journal.intentVersion!==undefined&&journal.intentVersion!=='locale-v1'&&!pdfIntent(journal))throw new GeminiError('REQUEST_UNCERTAIN','The request journal cannot be read safely. No generation repeated.',503);
+ if(journal.intentVersion===INVESTMENT_CONTEXT_VERSION&&!isInvestmentContext(journal.provenance.investmentContext))throw new GeminiError('REQUEST_UNCERTAIN','The request context snapshot is unavailable. No generation repeated.',503);
+}
 function encodeJournal(journal: Journal) {
   const text = JSON.stringify(journal);
   if (Buffer.byteLength(text) > journalLimit) throw new GeminiError('INPUT_TOO_LARGE', 'The analysis journal exceeds the prototype storage budget.', 413);
@@ -42,12 +49,13 @@ async function readJournal(key: string): Promise<Journal | null> {
     return value;
   } catch {throw new GeminiError('REQUEST_UNCERTAIN', 'The request journal is unavailable. No generation repeated.', 503);}
 }
-async function intentHash(input: z.infer<typeof requestSchema>, legacy = false, frozen?: Provenance) {
-  const value = JSON.stringify({caseId: input.caseId, name: input.name || '', documentIds: input.documentIds, ...(!legacy ? {locale: input.locale} : {}), ...(frozen ? {inputVersion: MINIMUM_INPUT_VERSION, model: frozen.model, promptVersion: frozen.promptVersion, sourceContext: frozen.sourceContext, documents: frozen.documents} : {})});
+async function intentHash(input: z.infer<typeof requestSchema>, legacy = false, frozen?: Provenance, contextual = false) {
+  const value = JSON.stringify({caseId: input.caseId, name: input.name || '', documentIds: input.documentIds, ...(!legacy ? {locale: input.locale} : {}), ...(frozen ? {inputVersion: MINIMUM_INPUT_VERSION, model: frozen.model, promptVersion: frozen.promptVersion, sourceContext: frozen.sourceContext, documents: frozen.documents} : {}), ...(contextual ? {investmentContext:frozen?.investmentContext} : {})});
   const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
   return Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, '0')).join('');
 }
 async function saveGenerated(user: User, input: Pick<SaveInput, 'caseId' | 'requestId' | 'revision'>, journal: Journal) {
+  validateJournalContext(journal);
   if (journal.provenance.caseId !== input.caseId) throw new GeminiError('REQUEST_REUSED', 'This request ID belongs to another investment case.', 409);
   if (journal.status === 'failed' && journal.failure) throw new GeminiError(journal.failure.code, journal.failure.message, journal.failure.status);
   if (journal.status === 'started') throw new GeminiError('REQUEST_IN_PROGRESS', 'This request has already started. Reusing its ID will not call Gemini again.', 409);
@@ -61,10 +69,11 @@ async function saveGenerated(user: User, input: Pick<SaveInput, 'caseId' | 'requ
   // Preserve literal model text. Empty arrays do not claim structured validation
   // or invent interpretations, counterarguments, evidence or source citations.
   const run: Run = {id: runId, name: journal.provenance.analysisName, createdAt: new Date().toISOString(), version: `gemini-text:${modelVersion}:${journal.provenance.promptVersion}`, assessment: journal.analysisText, evidence: [], findings: [], simulated: false};
-  if (journal.intentVersion === MINIMUM_INPUT_VERSION) {
+  if (pdfIntent(journal)) {
     const token = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
     run.minimum = {inputVersion: MINIMUM_INPUT_VERSION, requestId: input.requestId, model: journal.provenance.model, modelVersion, promptVersion: journal.provenance.promptVersion, locale: journal.provenance.language || 'id-ID', documents: journal.provenance.documents.map((doc, index) => ({...structuredClone(doc), order: index + 1, sourceLabel: `SOURCE-${index + 1}`})), usage: {promptTokens: token(journal.envelope.usageMetadata?.promptTokenCount), outputTokens: token(journal.envelope.usageMetadata?.candidatesTokenCount), totalTokens: token(journal.envelope.usageMetadata?.totalTokenCount)}};
   }
+  if(run.minimum&&journal.intentVersion===INVESTMENT_CONTEXT_VERSION)run.minimum.investmentContext=structuredClone(journal.provenance.investmentContext!);
   if (Buffer.byteLength(JSON.stringify(run)) > journalLimit) throw new GeminiError('INPUT_TOO_LARGE', 'Run storage budget exceeded.', 413);
   investmentCase.runs.unshift(run);
   addEvent(investmentCase, `Original Gemini PDF text saved (${runId}); input provenance retained in the private request journal.`, user.displayName);
@@ -110,11 +119,11 @@ export async function POST(request: Request) {
     if (!parsed.success) throw new GeminiError('INVALID_REQUEST', 'Select 1–5 case PDFs and provide a request ID and current revision.');
     const input = parsed.data, key = journalKey(user, input.requestId), trace = createGeminiDiagnostics(input.requestId);
     const finish = async (journal: Journal) => {
-      if (journal.intentVersion !== undefined && journal.intentVersion !== 'locale-v1' && journal.intentVersion !== MINIMUM_INPUT_VERSION) throw new GeminiError('REQUEST_UNCERTAIN', 'The request journal cannot be read safely. No generation repeated.', 503);
+      validateJournalContext(journal);
       // Replay binds the original, private source snapshot. Do not read mutable
       // case documents or call the provider to recover a completed response.
-      if (journal.intentVersion === MINIMUM_INPUT_VERSION && JSON.stringify(journal.provenance.documents.map(d => d.documentId)) !== JSON.stringify(input.documentIds)) throw new GeminiError('REQUEST_REUSED', 'This request ID belongs to another case, PDF selection or analysis context.', 409);
-      if (journal.intent !== await intentHash(input, journal.intentVersion === undefined, journal.intentVersion === MINIMUM_INPUT_VERSION ? journal.provenance : undefined)) throw new GeminiError('REQUEST_REUSED', 'This request ID belongs to another case, PDF selection or analysis context.', 409);
+      if (pdfIntent(journal) && JSON.stringify(journal.provenance.documents.map(d => d.documentId)) !== JSON.stringify(input.documentIds)) throw new GeminiError('REQUEST_REUSED', 'This request ID belongs to another case, PDF selection or analysis context.', 409);
+      if (journal.intent !== await intentHash(input, journal.intentVersion === undefined, pdfIntent(journal) ? journal.provenance : undefined, journal.intentVersion===INVESTMENT_CONTEXT_VERSION)) throw new GeminiError('REQUEST_REUSED', 'This request ID belongs to another case, PDF selection or analysis context.', 409);
       return saveGenerated(user, input, journal);
     };
     const initialState = await readState(user.userId), initialCase = initialState.cases.find(c => c.id === input.caseId);
@@ -130,11 +139,12 @@ export async function POST(request: Request) {
     // existing structured adapter remain unchanged. The key stays server-side.
     const config = readGeminiConfig({GEMINI_API_KEY: env.GEMINI_API_KEY, GEMINI_MODEL: minimumModel});
     const {instruction, promptVersion, language} = getMinimumAnalysisPrompt(input.locale);
-    const parts = [{text: MULTI_PDF_CONTEXT}, ...pdfs.documents.flatMap((doc, index) => [{text: JSON.stringify({sourceLabel: `SOURCE-${index + 1}`, documentId: doc.documentId, originalFilename: doc.originalFilename})}, {inlineData: {mimeType: 'application/pdf', data: Buffer.from(doc.bytes).toString('base64')}}]), {text: instruction}];
+    const investmentContext=buildInvestmentContext(company,investmentCase,input.name);
+    const parts = [{text: MULTI_PDF_CONTEXT}, ...pdfs.documents.flatMap((doc, index) => [{text: JSON.stringify({sourceLabel: `SOURCE-${index + 1}`, documentId: doc.documentId, originalFilename: doc.originalFilename})}, {inlineData: {mimeType: 'application/pdf', data: Buffer.from(doc.bytes).toString('base64')}}]), investmentContextPart(investmentContext), {text: instruction}];
     const body = JSON.stringify({contents: [{role: 'user', parts}], generationConfig: {maxOutputTokens: 8192}});
     if (Buffer.byteLength(body) > GEMINI_REQUEST_LIMIT) throw new GeminiError('INPUT_TOO_LARGE', 'Request limit exceeded.', 413);
-    const provenance: Provenance = {requestId: input.requestId, caseId: input.caseId, workspaceRevision: input.revision, analysisName: input.name || 'Gemini PDF analysis — text', company: structuredClone(company), caseContext: {name: investmentCase.name, thesis: investmentCase.thesis}, documents: pdfs.documents.map(d => ({documentId: d.documentId, originalFilename: d.originalFilename, mimeType: d.mimeType, sizeBytes: d.sizeBytes, source: structuredClone(d.source), storageEtag: d.storageEtag})), model: config.model, promptVersion, language, instruction, sourceContext: MULTI_PDF_CONTEXT, createdAt: new Date().toISOString()};
-    const started: Journal = {status: 'started', intent: await intentHash(input, false, provenance), intentVersion: MINIMUM_INPUT_VERSION, provenance};
+    const provenance: Provenance = {requestId: input.requestId, caseId: input.caseId, workspaceRevision: input.revision, analysisName: input.name || 'Gemini PDF analysis — text', investmentContext, documents: pdfs.documents.map(d => ({documentId: d.documentId, originalFilename: d.originalFilename, mimeType: d.mimeType, sizeBytes: d.sizeBytes, source: structuredClone(d.source), storageEtag: d.storageEtag})), model: config.model, promptVersion, language, instruction, sourceContext: MULTI_PDF_CONTEXT, createdAt: new Date().toISOString()};
+    const started: Journal = {status: 'started', intent: await intentHash(input, false, provenance, true), intentVersion: INVESTMENT_CONTEXT_VERSION, provenance};
     const claim = await bucket().put(key, encodeJournal(started), {onlyIf: new Headers({'If-None-Match': '*'}), httpMetadata: {contentType: 'application/json'}});
     if (!claim) {
       const winner = await readJournal(key);

@@ -8,7 +8,7 @@ const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.
 new Function('exports','module',compiled)(loaded.exports,loaded);
 const {getMinimumAnalysisPrompt,DEFAULT_PROMPT_LANGUAGE,PROMPT_LANGUAGES}=loaded.exports;
 const id=getMinimumAnalysisPrompt(),en=getMinimumAnalysisPrompt('en-US');
-assert.equal(DEFAULT_PROMPT_LANGUAGE,'id-ID');assert.deepEqual(PROMPT_LANGUAGES,['id-ID','en-US']);assert.equal(id.language,'id-ID');assert.equal(en.language,'en-US');assert.equal(id.promptVersion,'minimum-pdf-text-v2');
+assert.equal(DEFAULT_PROMPT_LANGUAGE,'id-ID');assert.deepEqual(PROMPT_LANGUAGES,['id-ID','en-US']);assert.equal(id.language,'id-ID');assert.equal(en.language,'en-US');assert.equal(id.promptVersion,'minimum-pdf-text-v3');
 assert.equal(id.instruction.split('RESPONSE LANGUAGE:')[0],en.instruction.split('RESPONSE LANGUAGE:')[0],'Analytical rules must remain language-independent');
 for(const prompt of [id,en]){
  for(const rule of ['juta / jt means million','miliar / milyar means billion','triliun means trillion','M commonly means million','Never assume every M','Rp 480 juta','Rp 5,76 M','Rp 5,76 miliar','not data about the analyzed company','Cross-check repeated figures','show relevant inputs','label derived calculations as estimates','Flag unresolved source contradictions'])assert.ok(prompt.instruction.includes(rule),rule);

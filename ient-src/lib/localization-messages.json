@@ -857,5 +857,18 @@
   "Select two different reports from this Case.": "Pilih dua laporan berbeda dari Case ini.",
   "Back to Saved Reports": "Kembali ke Laporan Tersimpan",
   "Start New Analysis": "Mulai Analisis Baru",
-  "This report is not available in the current Investment Case. Choose a saved report from this Case.": "Laporan ini tidak tersedia dalam Investment Case saat ini. Pilih laporan tersimpan dari Case ini."
+  "This report is not available in the current Investment Case. Choose a saved report from this Case.": "Laporan ini tidak tersedia dalam Investment Case saat ini. Pilih laporan tersimpan dari Case ini.",
+  "Investment Context": "Konteks Investasi",
+  "Investment Context Used": "Konteks Investasi yang Digunakan",
+  "Recorded investment strategy for this Case": "Strategi investasi yang dicatat untuk Case ini",
+  "Analyst-recorded context and assumptions, not independently verified facts or an approved fund mandate.": "Konteks dan asumsi yang dicatat Analis, bukan fakta terverifikasi independen atau mandat fund yang disetujui.",
+  "Selected PDFs provide source material; this context provides the evaluation perspective. Both are sent for a new request. AI does not approve investments.": "PDF terpilih menjadi materi sumber; konteks ini menjadi perspektif evaluasi. Keduanya dikirim untuk request baru. AI tidak memberikan persetujuan investasi.",
+  "Inspect context fields": "Periksa field konteks",
+  "Not specified": "Belum ditentukan",
+  "Some context values were shortened to the analysis input limits. The saved snapshot records only the included text.": "Sebagian nilai konteks dipotong sesuai batas input analisis. Snapshot tersimpan hanya mencatat teks yang disertakan.",
+  "Rechecking an existing request preserves its original context. Current Case edits apply to a new request only.": "Pemeriksaan ulang request yang ada mempertahankan konteks awalnya. Perubahan Case saat ini hanya berlaku untuk request baru.",
+  "Simulation does not use Gemini investment context.": "Simulasi tidak menggunakan konteks investasi Gemini.",
+  "Investment context snapshot not recorded": "Snapshot konteks investasi belum dicatat",
+  "This Run has no investment-context-v1 snapshot. Current Case values are not substituted.": "Run ini tidak memiliki snapshot investment-context-v1. Nilai Case saat ini tidak dipakai sebagai pengganti.",
+  "This flow reads selected PDFs with a bounded investment context snapshot. It saves the original model text, source versions and context used. Manual Evidence, internal notes and historical reports are not sent.": "Alur ini membaca PDF terpilih bersama snapshot konteks investasi yang dibatasi. Teks asli model, versi sumber, dan konteks yang digunakan disimpan. Evidence manual, catatan internal, dan laporan historis tidak dikirim."
 }

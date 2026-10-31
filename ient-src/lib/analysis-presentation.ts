@@ -43,7 +43,7 @@ export function isMinimumTextRun(run: Run) {return run.simulated === false && ru
 
 export function presentAnalysis(run: Pick<Run,'assessment'|'version'>): ReportPresentation {
   const original = run.assessment, fallback: ReportPresentation = {kind: 'full', original};
-  if (!run.version.startsWith('gemini-text:') || !run.version.endsWith(':minimum-pdf-text-v2')) return fallback;
+  if (!run.version.startsWith('gemini-text:') || !/:minimum-pdf-text-v[23]$/.test(run.version)) return fallback;
   try {
     const root = parser.parse(original) as unknown as Node;
     // Reference definitions may be shared across sections. Rendering their
